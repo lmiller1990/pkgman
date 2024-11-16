@@ -14,7 +14,6 @@ async function fetchMetadataFromRegistry(lib: string) {
 }
 
 /**
- *
  * Download a gzipped tar (tgz) from link to specified location.
  */
 async function downloadTar(link: string, to: string) {
@@ -68,10 +67,9 @@ async function getDependencyMetadata(
 
 async function getDependencies(
   deps: Record<string, string>,
-  parent: Dependency,
+  parent: Dependency | undefined,
   depth: number
 ): Promise<Dependency[]> {
-  // for (const [depName, vers] of Object.entries(deps)) {
   return Promise.all(
     Object.entries(deps).map(async ([depName, vers]) => {
       const { max, dependencies, tarball } = await getDependencyMetadata(
@@ -97,9 +95,6 @@ async function getDependencies(
 
 const pkgmanJson = JSON.parse(await fs.readFile("./pkgman.json", "utf-8"));
 const deps = pkgmanJson.dependencies;
-const root: Dependency = {
-  deps: [],
-};
 
 function replacer(key: string, value: Dependency) {
   if (key === "parent" && value && typeof value === "object") {
@@ -112,7 +107,7 @@ function printDependencyTree(root: Dependency) {
   console.log(JSON.stringify(root, replacer, 2));
 }
 
-root.deps = await getDependencies(deps, root, 0);
+const moduleGraph = await getDependencies(deps, undefined, 0);
 // printDependencyTree(root);
 
 // Resolve what and where to put
@@ -133,7 +128,7 @@ function walk(deps: Dependency[]) {
 }
 
 // Group them up
-const grouped = walk(root.deps);
+const grouped = walk(moduleGraph);
 
 function climb(dep: Dependency, path: string[] = []): string[] {
   if (!dep.parent) {
@@ -178,9 +173,3 @@ for (const mod of toFetch) {
   console.log(`Desired directory => ${out}`);
   await downloadTar(mod.dependency.tarball, out);
 }
-
-// console.log(toFetch);
-
-// const react = await fetchMetadataFromRegistry("react");
-
-// downloadTar(react.versions["18.3.1"]["dist"]["tarball"], "react");
