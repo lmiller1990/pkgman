@@ -1,15 +1,38 @@
 import fs from "fs-extra";
+import path from "path";
 import semver from "semver";
 import { pipeline } from "node:stream/promises";
 import * as tar from "tar";
 
-interface Dep {
+const moduleDirectory = "pkgman_modules";
+
+// Utils
+async function fetchMetadataFromRegistry(lib: string) {
+  const res = await globalThis.fetch(`${reg}/${lib}`);
+  const data = await res.json();
+  return data;
+}
+
+/**
+ *
+ * Download a gzipped tar (tgz) from link to specified location.
+ */
+async function downloadTar(link: string, to: string) {
+  const res = await globalThis.fetch(link);
+  await pipeline(res.body!, fs.createWriteStream("out.tgz"));
+  await tar.x({ f: "out.tgz", C: "/tmp" });
+  await fs.move("/tmp/package", to);
+  await fs.rm("out.tgz");
+}
+
+interface Dependency {
   name: string;
   tarball: string;
+  depth: number;
   desired: string;
   max: string | undefined;
-  parent: Dep;
-  deps: Dep[];
+  parent?: Dependency;
+  deps: Dependency[];
 }
 
 const reg = "https://registry.npmjs.org";
@@ -45,9 +68,9 @@ async function getDependencyMetadata(
 
 async function getDependencies(
   deps: Record<string, string>,
-  parent: Dep,
+  parent: Dependency,
   depth: number
-): Promise<Dep[]> {
+): Promise<Dependency[]> {
   // for (const [depName, vers] of Object.entries(deps)) {
   return Promise.all(
     Object.entries(deps).map(async ([depName, vers]) => {
@@ -57,8 +80,9 @@ async function getDependencies(
         depth
       );
 
-      const dep: Dep = {
+      const dep: Dependency = {
         name: depName,
+        depth,
         tarball,
         parent,
         desired: vers,
@@ -73,38 +97,90 @@ async function getDependencies(
 
 const pkgmanJson = JSON.parse(await fs.readFile("./pkgman.json", "utf-8"));
 const deps = pkgmanJson.dependencies;
-const root: Omit<Dep, "desired" | "max" | "parent" | "tarball"> = {
-  name: "root",
+const root: Dependency = {
   deps: [],
 };
 
-function replacer(key: string, value: Dep) {
+function replacer(key: string, value: Dependency) {
   if (key === "parent" && value && typeof value === "object") {
     return value.name;
   }
   return value;
 }
 
-function printDependencyTree(root: Dep) {
+function printDependencyTree(root: Dependency) {
   console.log(JSON.stringify(root, replacer, 2));
 }
 
-root.deps = await getDependencies(deps, root as Dep, 0);
-printDependencyTree(root);
+root.deps = await getDependencies(deps, root, 0);
+// printDependencyTree(root);
 
-async function fetchMetadataFromRegistry(lib: string) {
-  const res = await globalThis.fetch(`${reg}/${lib}`);
-  const data = await res.json();
-  return data;
+// Resolve what and where to put
+function walk(deps: Dependency[]) {
+  const map: Map<string, Dependency[]> = new Map();
+  function traverse(deps: Dependency[]) {
+    for (const dep of deps) {
+      if (!map.has(dep.name)) {
+        map.set(dep.name, [dep]);
+      } else {
+        map.get(dep.name)!.push(dep);
+      }
+      traverse(dep.deps);
+    }
+  }
+  traverse(deps);
+  return map;
 }
 
-async function downloadTar(link: string, to: string) {
-  const res = await globalThis.fetch(link);
-  await pipeline(res.body!, fs.createWriteStream("out.tgz"));
-  await tar.x({ f: "out.tgz", C: "/tmp" });
-  await fs.move("/tmp/package", `./pkgman_modules/${to}`);
+// Group them up
+const grouped = walk(root.deps);
+
+function climb(dep: Dependency, path: string[] = []): string[] {
+  if (!dep.parent) {
+    // top level
+    return path;
+  } else {
+    const p = [dep.name, ...path];
+    return climb(dep.parent, p);
+  }
 }
 
-const react = await fetchMetadataFromRegistry("react");
+// console.log(grouped.get("js-tokens")[1]);
+
+// console.log(grouped);
+const toFetch: Array<{ dependency: Dependency; outputDir: string }> = [];
+
+for (const [name, versions] of grouped) {
+  const [dependency, ...rest] = versions;
+  toFetch.push({ dependency, outputDir: path.join(moduleDirectory, name) });
+  if (rest.length) {
+    for (const dependency of rest) {
+      const outdir = climb(dependency);
+      toFetch.push({
+        dependency,
+        outputDir: path.join(
+          moduleDirectory,
+          outdir.join(`/${moduleDirectory}/`)
+        ),
+      });
+    }
+  }
+}
+
+// install from shallow to deepest
+toFetch.sort((x, y) => (x.dependency.depth < y.dependency.depth ? -1 : -1));
+
+await fs.rm(moduleDirectory, { recursive: true, force: true });
+
+for (const mod of toFetch) {
+  console.log(`Installing ${mod.dependency.name}@${mod.dependency.max}`);
+  const out = path.join(mod.outputDir);
+  console.log(`Desired directory => ${out}`);
+  await downloadTar(mod.dependency.tarball, out);
+}
+
+// console.log(toFetch);
+
+// const react = await fetchMetadataFromRegistry("react");
 
 // downloadTar(react.versions["18.3.1"]["dist"]["tarball"], "react");
