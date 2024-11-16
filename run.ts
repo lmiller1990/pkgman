@@ -133,7 +133,7 @@ const grouped = walk(moduleGraph);
 function climb(dep: Dependency, path: string[] = []): string[] {
   if (!dep.parent) {
     // top level
-    return path;
+    return [dep.name, ...path];
   } else {
     const p = [dep.name, ...path];
     return climb(dep.parent, p);
@@ -149,18 +149,23 @@ for (const [name, versions] of grouped) {
   const [dependency, ...rest] = versions;
   toFetch.push({ dependency, outputDir: path.join(moduleDirectory, name) });
   if (rest.length) {
+    console.log("confict in ", name);
     for (const dependency of rest) {
       const outdir = climb(dependency);
+      const outputDir = path.join(
+        moduleDirectory,
+        outdir.join(`/${moduleDirectory}/`)
+      );
+      console.log("try", outputDir);
       toFetch.push({
         dependency,
-        outputDir: path.join(
-          moduleDirectory,
-          outdir.join(`/${moduleDirectory}/`)
-        ),
+        outputDir,
       });
     }
   }
 }
+
+// console.log(grouped.get("react")[0].deps[0].deps);
 
 // install from shallow to deepest
 toFetch.sort((x, y) => (x.dependency.depth < y.dependency.depth ? -1 : -1));
@@ -168,8 +173,10 @@ toFetch.sort((x, y) => (x.dependency.depth < y.dependency.depth ? -1 : -1));
 await fs.rm(moduleDirectory, { recursive: true, force: true });
 
 for (const mod of toFetch) {
-  console.log(`Installing ${mod.dependency.name}@${mod.dependency.max}`);
   const out = path.join(mod.outputDir);
+  console.log(
+    `Installing ${mod.dependency.name}@${mod.dependency.max} in ${out}`
+  );
   console.log(`Desired directory => ${out}`);
   await downloadTar(mod.dependency.tarball, out);
 }
