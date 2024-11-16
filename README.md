@@ -19,8 +19,7 @@ node --experimental-strip-types run.ts
 Example output (`pkgman_modules`)
 
 ```sh
-$ tree pkgman_modules/                                                                                                                  (git)-[main]-
-pkgman_modules/
+pkgman_modules
 ├── js-tokens
 │   ├── LICENSE
 │   ├── README.md
@@ -35,13 +34,6 @@ pkgman_modules/
 │   ├── index.js
 │   ├── loose-envify.js
 │   ├── package.json
-│   ├── pkgman_modules
-│   │   └── js-tokens
-│   │       ├── CHANGELOG.md
-│   │       ├── LICENSE
-│   │       ├── README.md
-│   │       ├── index.js
-│   │       └── package.json
 │   └── replace.js
 └── react
     ├── LICENSE
@@ -61,10 +53,20 @@ pkgman_modules/
     ├── jsx-dev-runtime.js
     ├── jsx-runtime.js
     ├── package.json
+    ├── pkgman_modules
+    │   └── loose-envify
+    │       └── pkgman_modules
+    │           └── js-tokens
+    │               ├── CHANGELOG.md
+    │               ├── LICENSE
+    │               ├── README.md
+    │               ├── index.js
+    │               └── package.json
     ├── react.shared-subset.js
     └── umd
         ├── react.development.js
         ├── react.production.min.js
         └── react.profiling.min.js
 
+10 directories, 38 files
 ```
