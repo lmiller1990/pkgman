@@ -5,7 +5,7 @@ A minimal example showing how to recursively resolve packages from npm.
 Running:
 
 ```sh
-nodemon --exec node --experimental-strip-types run.ts
+node --experimental-strip-types run.ts
 ```
 
 ## Todo
@@ -15,9 +15,3 @@ nodemon --exec node --experimental-strip-types run.ts
 3. Figure out which versions we want
 4. Stick them in
 5. Print any errors
-
-1. deps
-
-```sh
-curl https://registry.npmjs.org/<library>
-```
