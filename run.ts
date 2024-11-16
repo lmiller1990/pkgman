@@ -32,8 +32,6 @@ async function getMaxSatisfies(
     max,
     nested,
   };
-
-  // let all = await getDependencies(nestedDeps, depth + 1, parent);
 }
 
 async function getDependencies(
@@ -41,23 +39,26 @@ async function getDependencies(
   parent: Dep,
   depth: number
 ): Promise<Dep[]> {
-  for (const [depName, vers] of Object.entries(deps)) {
-    const { max, nested } = await getMaxSatisfies(
-      depName,
-      vers as string,
-      depth
-    );
+  // for (const [depName, vers] of Object.entries(deps)) {
+  return Promise.all(
+    Object.entries(deps).map(async ([depName, vers]) => {
+      const { max, nested } = await getMaxSatisfies(
+        depName,
+        vers as string,
+        depth
+      );
 
-    const dep: Dep = {
-      name: depName,
-      parent,
-      desired: vers,
-      max,
-      deps: [],
-    };
-    dep.deps = await getDependencies(nested, dep, depth + 1);
-    return dep.deps;
-  }
+      const dep: Dep = {
+        name: depName,
+        parent,
+        desired: vers,
+        max,
+        deps: [],
+      };
+      dep.deps = await getDependencies(nested, dep, depth + 1);
+      return dep;
+    })
+  );
 }
 
 const pkgmanJson = JSON.parse(await fs.readFile("./pkgman.json", "utf-8"));
@@ -67,9 +68,15 @@ const root: Omit<Dep, "desired" | "max" | "parent"> = {
   deps: [],
 };
 
-const moduleGraph = await getDependencies(deps, root as Dep, 0);
+function replacer(key: string, value: Dep) {
+  if (key === "parent" && value && typeof value === "object") {
+    return value.name;
+  }
+  return value;
+}
 
-console.log(moduleGraph);
+root.deps = await getDependencies(deps, root as Dep, 0);
+console.log(JSON.stringify(root, replacer, 2));
 
 async function fetchMetadata(lib: string) {
   const res = await globalThis.fetch(`${reg}/${lib}`);
